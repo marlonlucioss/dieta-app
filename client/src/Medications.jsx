@@ -1,25 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 
-const MED_STATUS_COLORS = {
-  Tomei: "#2e7d32",
-  "Não tomei": "#c62828",
+const MED_COLORS = {
+  Tomei:      { color: "#16a34a", bg: "#f0fdf4" },
+  "Não tomei":{ color: "#dc2626", bg: "#fef2f2" },
 };
 
-export default function Medications({ date, user }) {
+export default function Medications({ date, user, showToast }) {
   const [medications, setMedications] = useState([]);
   const [statusOptions, setStatusOptions] = useState([]);
-  const [entries, setEntries] = useState([]);
-  const [savedKey, setSavedKey] = useState(null);
-  const [newName, setNewName] = useState("");
-  const [newTimes, setNewTimes] = useState([""]);
-  const obsTimers = useRef({});
-  const [obsDrafts, setObsDrafts] = useState({});
-  const [panelOpen, setPanelOpen] = useState(false);
+  const [entries, setEntries]         = useState([]);
+  const [newName, setNewName]         = useState("");
+  const [newTimes, setNewTimes]       = useState([""]);
+  const obsTimers  = useRef({});
+  const [obsDrafts, setObsDrafts]     = useState({});
+  const [panelOpen, setPanelOpen]     = useState(false);
 
   function reloadMedications() {
-    fetch(`/api/medications?user=${user}`)
-      .then((r) => r.json())
-      .then(setMedications);
+    fetch(`/api/medications?user=${user}`).then((r) => r.json()).then(setMedications);
   }
 
   function reloadEntries() {
@@ -28,17 +25,13 @@ export default function Medications({ date, user }) {
       .then((data) => {
         setEntries(data);
         const drafts = {};
-        data.forEach((e) => {
-          drafts[entryKey(e)] = e.observacao || "";
-        });
+        data.forEach((e) => { drafts[entryKey(e)] = e.observacao || ""; });
         setObsDrafts(drafts);
       });
   }
 
   useEffect(() => {
-    fetch("/api/medication-logs/status-options")
-      .then((r) => r.json())
-      .then(setStatusOptions);
+    fetch("/api/medication-logs/status-options").then((r) => r.json()).then(setStatusOptions);
   }, []);
 
   useEffect(() => {
@@ -46,302 +39,258 @@ export default function Medications({ date, user }) {
     reloadEntries();
   }, [date, user]);
 
-  function entryKey(entry) {
-    return `${entry.medicationId}_${entry.time}`;
-  }
+  function entryKey(e) { return `${e.medicationId}_${e.time}`; }
 
-  async function addMedication(e) {
-    e.preventDefault();
+  async function addMedication(ev) {
+    ev.preventDefault();
     const times = newTimes.map((t) => t.trim()).filter(Boolean);
     if (!newName.trim() || times.length === 0) return;
-
     await fetch(`/api/medications?user=${user}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newName.trim(), times, user }),
     });
-    setNewName("");
-    setNewTimes([""]);
-    reloadMedications();
-    reloadEntries();
+    setNewName(""); setNewTimes([""]);
+    reloadMedications(); reloadEntries();
+    showToast?.("Medicação adicionada ✓");
   }
 
   async function removeMedication(id) {
     if (!confirm("Remover esta medicação? O histórico já registrado será mantido.")) return;
     await fetch(`/api/medications/${id}`, { method: "DELETE" });
-    reloadMedications();
-    reloadEntries();
+    reloadMedications(); reloadEntries();
+    showToast?.("Medicação removida");
   }
 
   async function setStatus(entry, status) {
     const newStatus = entry.status === status ? null : status;
     const res = await fetch(`/api/medication-logs/${date}?user=${user}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        user,
-        medicationId: entry.medicationId,
-        medicationName: entry.medicationName,
-        time: entry.time,
-        status: newStatus,
-      }),
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user, medicationId: entry.medicationId, medicationName: entry.medicationName, time: entry.time, status: newStatus }),
     });
     const updated = await res.json();
     setEntries((prev) => prev.map((e) => (entryKey(e) === entryKey(entry) ? updated : e)));
-    setSavedKey(entryKey(entry));
-    setTimeout(() => setSavedKey((current) => (current === entryKey(entry) ? null : current)), 1500);
+    showToast?.("Salvo ✓");
   }
 
   function handleObsChange(entry, value) {
     const key = entryKey(entry);
-    setObsDrafts((prev) => ({ ...prev, [key]: value }));
-
+    setObsDrafts((p) => ({ ...p, [key]: value }));
     clearTimeout(obsTimers.current[key]);
     obsTimers.current[key] = setTimeout(async () => {
       const res = await fetch(`/api/medication-logs/${date}?user=${user}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          user,
-          medicationId: entry.medicationId,
-          medicationName: entry.medicationName,
-          time: entry.time,
-          observacao: value,
-        }),
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user, medicationId: entry.medicationId, medicationName: entry.medicationName, time: entry.time, observacao: value }),
       });
       const updated = await res.json();
       setEntries((prev) => prev.map((e) => (entryKey(e) === key ? updated : e)));
-      setSavedKey(key);
-      setTimeout(() => setSavedKey((current) => (current === key ? null : current)), 1500);
+      showToast?.("Observação salva ✓");
     }, 800);
   }
 
-  function updateNewTime(index, value) {
-    setNewTimes((prev) => prev.map((t, i) => (i === index ? value : t)));
-  }
-
-  function addTimeField() {
-    setNewTimes((prev) => [...prev, ""]);
-  }
-
-  function removeTimeField(index) {
-    setNewTimes((prev) => prev.filter((_, i) => i !== index));
-  }
-
   return (
-    <div style={{ marginTop: 40 }}>
-      <h2>Medicações</h2>
-
-      <div style={{ display: "grid", gap: 16 }}>
-        {entries.length === 0 && (
-          <p style={{ color: "#777" }}>
-            Nenhuma medicação cadastrada. Use o botão de configurações no canto inferior direito para adicionar.
+    <>
+      {entries.length === 0 ? (
+        <div style={{
+          background: "white", borderRadius: 16, padding: 24, textAlign: "center",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.06)", color: "#9ca3af",
+        }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>💊</div>
+          <p style={{ margin: 0, fontSize: 14 }}>
+            Nenhuma medicação cadastrada.<br />
+            Toque em <strong>⚙</strong> para adicionar.
           </p>
-        )}
-        {entries.map((entry) => {
-          const key = entryKey(entry);
-          return (
-            <div key={key} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-              <strong>
-                {entry.medicationName} — {entry.time}
-              </strong>
-              {savedKey === key && <span style={{ marginLeft: 8, color: "#2e7d32", fontSize: 13 }}>Salvo!</span>}
-              <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                {statusOptions.map((status) => {
-                  const selected = entry.status === status;
-                  return (
-                    <button
-                      key={status}
-                      onClick={() => setStatus(entry, status)}
-                      style={{
-                        padding: "6px 12px",
-                        borderRadius: 6,
-                        border: `2px solid ${MED_STATUS_COLORS[status]}`,
-                        background: selected ? MED_STATUS_COLORS[status] : "white",
-                        color: selected ? "white" : MED_STATUS_COLORS[status],
-                        cursor: "pointer",
-                      }}
-                    >
-                      {status}
-                    </button>
-                  );
-                })}
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {entries.map((entry) => {
+            const key = entryKey(entry);
+            const sel = entry.status;
+            const meta = sel ? MED_COLORS[sel] : null;
+            return (
+              <div key={key} style={{
+                background: "white", borderRadius: 16, padding: 16,
+                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                borderLeft: meta ? `4px solid ${meta.color}` : "4px solid #e5e7eb",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                  <span style={{ fontSize: 18 }}>💊</span>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{entry.medicationName}</div>
+                    <div style={{ fontSize: 12, color: "#9ca3af" }}>{entry.time}</div>
+                  </div>
+                  {sel && (
+                    <span style={{
+                      marginLeft: "auto", fontSize: 12, fontWeight: 600,
+                      color: meta.color, background: meta.bg,
+                      padding: "3px 10px", borderRadius: 100,
+                    }}>
+                      {sel}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  {statusOptions.map((status) => {
+                    const active = entry.status === status;
+                    const m = MED_COLORS[status];
+                    return (
+                      <button key={status} onClick={() => setStatus(entry, status)} style={{
+                        padding: "10px", borderRadius: 10,
+                        border: `2px solid ${active ? m.color : "#e5e7eb"}`,
+                        background: active ? m.color : "white",
+                        color: active ? "white" : "#374151",
+                        fontWeight: active ? 700 : 500, fontSize: 14,
+                        transition: "all 0.15s",
+                      }}>
+                        {status}
+                      </button>
+                    );
+                  })}
+                </div>
+                <textarea
+                  placeholder="Observação..."
+                  value={obsDrafts[key] || ""}
+                  onChange={(e) => handleObsChange(entry, e.target.value)}
+                  rows={2}
+                  style={{
+                    width: "100%", marginTop: 10, padding: "10px 12px",
+                    borderRadius: 10, border: "1px solid #e5e7eb",
+                    background: "#f9fafb", fontSize: 14, color: "#374151", outline: "none",
+                  }}
+                />
               </div>
-              <textarea
-                placeholder="Observação (ex: motivo de não tomar, efeito colateral...)"
-                value={obsDrafts[key] || ""}
-                onChange={(e) => handleObsChange(entry, e.target.value)}
-                rows={2}
-                style={{
-                  width: "100%",
-                  marginTop: 10,
-                  padding: 8,
-                  borderRadius: 6,
-                  border: "1px solid #ccc",
-                  resize: "vertical",
-                  fontFamily: "inherit",
-                  boxSizing: "border-box",
-                }}
-              />
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
 
+      {/* ── FAB ── */}
       <button
         onClick={() => setPanelOpen(true)}
         title="Configurar medicações"
         style={{
-          position: "fixed",
-          bottom: 24,
-          right: 24,
-          width: 56,
-          height: 56,
-          borderRadius: "50%",
-          border: "none",
-          background: "#1565c0",
-          color: "white",
-          fontSize: 24,
-          cursor: "pointer",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.3)",
-          zIndex: 100,
+          position: "fixed", bottom: 80, right: 20,
+          width: 52, height: 52, borderRadius: "50%", border: "none",
+          background: "#2563eb", color: "white", fontSize: 22,
+          boxShadow: "0 4px 12px rgba(37,99,235,0.4)", zIndex: 100,
+          display: "flex", alignItems: "center", justifyContent: "center",
         }}
       >
         ⚙
       </button>
 
+      {/* ── SIDE PANEL ── */}
       {panelOpen && (
         <>
-          <div
-            onClick={() => setPanelOpen(false)}
-            style={{
-              position: "fixed",
-              inset: 0,
-              background: "rgba(0,0,0,0.4)",
-              zIndex: 200,
-            }}
-          />
-          <div
-            style={{
-              position: "fixed",
-              top: 0,
-              right: 0,
-              height: "100%",
-              width: "min(420px, 100%)",
-              background: "white",
-              boxShadow: "-2px 0 12px rgba(0,0,0,0.2)",
-              zIndex: 201,
-              padding: 24,
-              overflowY: "auto",
-              boxSizing: "border-box",
-            }}
-          >
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h2 style={{ margin: 0 }}>Configurar medicações</h2>
-              <button
-                onClick={() => setPanelOpen(false)}
-                style={{ border: "none", background: "none", fontSize: 22, cursor: "pointer" }}
-              >
-                ×
-              </button>
+          <div onClick={() => setPanelOpen(false)} style={{
+            position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200,
+          }} />
+          <div style={{
+            position: "fixed", top: 0, right: 0, height: "100%",
+            width: "min(400px, 100%)", background: "white",
+            boxShadow: "-4px 0 24px rgba(0,0,0,0.15)",
+            zIndex: 201, overflowY: "auto", boxSizing: "border-box",
+          }}>
+            {/* Panel header */}
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "20px 20px 16px", borderBottom: "1px solid #e5e7eb",
+              position: "sticky", top: 0, background: "white", zIndex: 1,
+            }}>
+              <h2 style={{ margin: 0, fontSize: 18 }}>Medicações</h2>
+              <button onClick={() => setPanelOpen(false)} style={{
+                width: 36, height: 36, borderRadius: 10, border: "1px solid #e5e7eb",
+                background: "white", color: "#374151", fontSize: 20,
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}>×</button>
             </div>
 
-            <h3>Medicações cadastradas</h3>
-            {medications.length === 0 && <p style={{ color: "#777" }}>Nenhuma medicação cadastrada.</p>}
-            <ul style={{ paddingLeft: 0, listStyle: "none" }}>
-              {medications.map((med) => (
-                <li
-                  key={med._id}
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    padding: "6px 0",
-                    borderBottom: "1px solid #eee",
-                  }}
-                >
-                  <span>
-                    <strong>{med.name}</strong> — {med.times.join(", ")}
-                  </span>
-                  <button
-                    onClick={() => removeMedication(med._id)}
-                    style={{
-                      border: "1px solid #c62828",
-                      color: "#c62828",
-                      background: "white",
-                      borderRadius: 6,
-                      padding: "4px 10px",
-                      cursor: "pointer",
-                    }}
-                  >
-                    Remover
-                  </button>
-                </li>
-              ))}
-            </ul>
-
-            <h3>Adicionar medicação</h3>
-            <form onSubmit={addMedication}>
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <input
-                  type="text"
-                  placeholder="Nome da medicação"
-                  value={newName}
-                  onChange={(e) => setNewName(e.target.value)}
-                  style={{ padding: 8, borderRadius: 6, border: "1px solid #ccc" }}
-                />
-                {newTimes.map((t, i) => (
-                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <input
-                      type="time"
-                      value={t}
-                      onChange={(e) => updateNewTime(i, e.target.value)}
-                      style={{ padding: 8, borderRadius: 6, border: "1px solid #ccc", flex: 1 }}
-                    />
-                    {newTimes.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={() => removeTimeField(i)}
-                        style={{ border: "none", background: "none", color: "#c62828", cursor: "pointer", fontSize: 18 }}
-                      >
-                        ×
-                      </button>
-                    )}
+            <div style={{ padding: 20, display: "flex", flexDirection: "column", gap: 24 }}>
+              {/* List */}
+              <div>
+                <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Cadastradas
+                </h3>
+                {medications.length === 0 ? (
+                  <p style={{ color: "#9ca3af", fontSize: 14 }}>Nenhuma medicação.</p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {medications.map((med) => (
+                      <div key={med._id} style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "12px 14px", borderRadius: 12, background: "#f9fafb",
+                        border: "1px solid #e5e7eb",
+                      }}>
+                        <div>
+                          <div style={{ fontWeight: 600, fontSize: 15 }}>{med.name}</div>
+                          <div style={{ fontSize: 13, color: "#9ca3af" }}>{med.times.join(", ")}</div>
+                        </div>
+                        <button onClick={() => removeMedication(med._id)} style={{
+                          padding: "6px 12px", borderRadius: 8,
+                          border: "1px solid #fca5a5", background: "#fef2f2",
+                          color: "#dc2626", fontWeight: 600, fontSize: 13,
+                        }}>
+                          Remover
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addTimeField}
-                  style={{
-                    border: "1px solid #1565c0",
-                    color: "#1565c0",
-                    background: "white",
-                    borderRadius: 6,
-                    padding: "6px 10px",
-                    cursor: "pointer",
-                    alignSelf: "flex-start",
-                  }}
-                >
-                  + horário
-                </button>
-                <button
-                  type="submit"
-                  style={{
-                    border: "2px solid #2e7d32",
-                    background: "#2e7d32",
-                    color: "white",
-                    borderRadius: 6,
-                    padding: "8px 14px",
-                    cursor: "pointer",
-                  }}
-                >
-                  Adicionar medicação
-                </button>
+                )}
               </div>
-            </form>
+
+              {/* Add form */}
+              <div>
+                <h3 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Adicionar
+                </h3>
+                <form onSubmit={addMedication} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <input
+                    type="text"
+                    placeholder="Nome da medicação"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    style={{
+                      padding: "12px", borderRadius: 10, border: "1px solid #e5e7eb",
+                      background: "#f9fafb", fontSize: 15, outline: "none",
+                    }}
+                  />
+                  {newTimes.map((t, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <input
+                        type="time"
+                        value={t}
+                        onChange={(e) => setNewTimes((p) => p.map((v, j) => j === i ? e.target.value : v))}
+                        style={{
+                          flex: 1, padding: "12px", borderRadius: 10,
+                          border: "1px solid #e5e7eb", background: "#f9fafb", fontSize: 15, outline: "none",
+                        }}
+                      />
+                      {newTimes.length > 1 && (
+                        <button type="button" onClick={() => setNewTimes((p) => p.filter((_, j) => j !== i))} style={{
+                          width: 36, height: 36, borderRadius: 10, border: "1px solid #fca5a5",
+                          background: "#fef2f2", color: "#dc2626", fontSize: 18,
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                        }}>×</button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" onClick={() => setNewTimes((p) => [...p, ""])} style={{
+                    padding: "10px", borderRadius: 10, border: "1px dashed #93c5fd",
+                    background: "#eff6ff", color: "#2563eb", fontWeight: 600, fontSize: 14,
+                  }}>
+                    + Adicionar horário
+                  </button>
+                  <button type="submit" style={{
+                    padding: "14px", borderRadius: 10, border: "none",
+                    background: "#16a34a", color: "white", fontWeight: 700, fontSize: 15,
+                  }}>
+                    Salvar medicação
+                  </button>
+                </form>
+              </div>
+            </div>
           </div>
         </>
       )}
-    </div>
+    </>
   );
 }

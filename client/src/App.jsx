@@ -3,44 +3,98 @@ import Medications from "./Medications.jsx";
 import { weekdayLabel } from "./weekday.js";
 
 const MEALS = [
-  { key: "cafe", label: "Café da manhã" },
-  { key: "almoco", label: "Almoço" },
-  { key: "lanche", label: "Lanche" },
-  { key: "jantar", label: "Jantar" },
+  { key: "cafe",   label: "Café da manhã", emoji: "☀️" },
+  { key: "almoco", label: "Almoço",        emoji: "🍽️" },
+  { key: "lanche", label: "Lanche",        emoji: "🥪" },
+  { key: "jantar", label: "Jantar",        emoji: "🌙" },
 ];
 
-const STATUS_COLORS = {
-  Certa: "#2e7d32",
-  Errada: "#c62828",
-  "Não feita": "#757575",
-  Livre: "#1565c0",
+const STATUS_META = {
+  Certa:      { color: "#16a34a", bg: "#f0fdf4" },
+  Errada:     { color: "#dc2626", bg: "#fef2f2" },
+  "Não feita":{ color: "#6b7280", bg: "#f9fafb" },
+  Livre:      { color: "#2563eb", bg: "#eff6ff" },
+};
+
+const EXTRA_META = {
+  Completo:      { color: "#16a34a" },
+  Incompleto:    { color: "#d97706" },
+  "Não treinei": { color: "#6b7280" },
+  "Não fiz":     { color: "#6b7280" },
+  "Bati a meta": { color: "#2563eb" },
+  "Não bati":    { color: "#dc2626" },
 };
 
 const USERS = [
-  { id: "marlon", label: "Marlon" },
-  { id: "jessica", label: "Jéssica" },
+  { id: "marlon",  label: "Marlon",  initials: "M" },
+  { id: "jessica", label: "Jéssica", initials: "J" },
 ];
+
+const HISTORY_COLORS = {
+  Certa: "#16a34a", Errada: "#dc2626", "Não feita": "#9ca3af", Livre: "#2563eb",
+};
 
 function todayISO() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function addDays(iso, n) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const dt = new Date(y, m - 1, d + n);
+  return dt.toISOString().slice(0, 10);
+}
+
+function formatDate(iso) {
+  if (!iso) return "";
+  const [y, m, d] = iso.split("-").map(Number);
+  return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function Toast({ message, visible }) {
+  return (
+    <div style={{
+      position: "fixed", bottom: 80, left: "50%", transform: `translateX(-50%) translateY(${visible ? 0 : 12}px)`,
+      background: "#1f2937", color: "white", padding: "10px 20px", borderRadius: 100,
+      fontSize: 14, fontWeight: 500, zIndex: 999, opacity: visible ? 1 : 0,
+      transition: "opacity 0.2s, transform 0.2s", pointerEvents: "none", whiteSpace: "nowrap",
+    }}>
+      {message}
+    </div>
+  );
+}
+
+// ─── Section tabs inside Today ────────────────────────────────────────────────
+const SECTIONS = ["Dieta", "Exercícios", "Medicações"];
+
 export default function App() {
-  const [user, setUser] = useState("marlon");
-  const [date, setDate] = useState(todayISO());
-  const [log, setLog] = useState(null);
+  const [user, setUser]               = useState("marlon");
+  const [date, setDate]               = useState(todayISO());
+  const [log, setLog]                 = useState(null);
   const [statusOptions, setStatusOptions] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [savedMeal, setSavedMeal] = useState(null);
-  const [reportStart, setReportStart] = useState(todayISO());
-  const [reportEnd, setReportEnd] = useState(todayISO());
-  const [obsDrafts, setObsDrafts] = useState({});
-  const [savedObs, setSavedObs] = useState(null);
-  const obsTimers = useRef({});
-  const [extraOptions, setExtraOptions] = useState({ treino: [], cardio: [], agua: [] });
-  const [savedExtra, setSavedExtra] = useState(null);
+  const [extraOptions, setExtraOptions]   = useState({ treino: [], cardio: [], agua: [] });
+  const [history, setHistory]         = useState([]);
+  const [obsDrafts, setObsDrafts]     = useState({});
   const [extraObsDrafts, setExtraObsDrafts] = useState({ treino: "", cardio: "" });
+  const obsTimers     = useRef({});
   const extraObsTimers = useRef({});
+
+  const [toast, setToast]     = useState({ msg: "", visible: false });
+  const toastTimer            = useRef(null);
+
+  const [activeTab, setActiveTab]       = useState("hoje"); // hoje | historico | relatorio
+  const [activeSection, setActiveSection] = useState("Dieta");
+
+  const [reportStart, setReportStart] = useState(todayISO());
+  const [reportEnd, setReportEnd]     = useState(todayISO());
+
+  const today = todayISO();
+
+  function showToast(msg) {
+    clearTimeout(toastTimer.current);
+    setToast({ msg, visible: true });
+    toastTimer.current = setTimeout(() => setToast((t) => ({ ...t, visible: false })), 1800);
+  }
 
   useEffect(() => {
     fetch("/api/day-logs/status-options").then((r) => r.json()).then(setStatusOptions);
@@ -53,13 +107,8 @@ export default function App() {
       .then((r) => r.json())
       .then((data) => {
         setLog(data);
-        setObsDrafts({
-          cafe: data.cafeObs || "",
-          almoco: data.almocoObs || "",
-          lanche: data.lancheObs || "",
-          jantar: data.jantarObs || "",
-        });
-        setExtraObsDrafts({ treino: data.treinoObs || "", cardio: data.cardioObs || "" });
+        setObsDrafts({ cafe: data.cafeObs||"", almoco: data.almocoObs||"", lanche: data.lancheObs||"", jantar: data.jantarObs||"" });
+        setExtraObsDrafts({ treino: data.treinoObs||"", cardio: data.cardioObs||"" });
       });
   }, [date, user]);
 
@@ -70,59 +119,47 @@ export default function App() {
   async function setMealStatus(meal, status) {
     const newStatus = log[meal] === status ? null : status;
     const res = await fetch(`/api/day-logs/${date}?user=${user}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ meal, status: newStatus, user }),
     });
-    const updated = await res.json();
-    setLog(updated);
-    setSavedMeal(meal);
-    setTimeout(() => setSavedMeal((c) => (c === meal ? null : c)), 1500);
+    setLog(await res.json());
+    showToast("Salvo ✓");
   }
 
   function handleObsChange(meal, value) {
-    setObsDrafts((prev) => ({ ...prev, [meal]: value }));
+    setObsDrafts((p) => ({ ...p, [meal]: value }));
     clearTimeout(obsTimers.current[meal]);
     obsTimers.current[meal] = setTimeout(async () => {
       const res = await fetch(`/api/day-logs/${date}/observacao?user=${user}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        method: "PUT", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ meal, observacao: value, user }),
       });
-      const updated = await res.json();
-      setLog(updated);
-      setSavedObs(meal);
-      setTimeout(() => setSavedObs((c) => (c === meal ? null : c)), 1500);
-    }, 800);
-  }
-
-  function handleExtraObsChange(field, value) {
-    setExtraObsDrafts((prev) => ({ ...prev, [field]: value }));
-    clearTimeout(extraObsTimers.current[field]);
-    extraObsTimers.current[field] = setTimeout(async () => {
-      const res = await fetch(`/api/day-logs/${date}/extra?user=${user}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ field, observacao: value, user }),
-      });
-      const updated = await res.json();
-      setLog(updated);
-      setSavedExtra(field + "_obs");
-      setTimeout(() => setSavedExtra((c) => (c === field + "_obs" ? null : c)), 1500);
+      setLog(await res.json());
+      showToast("Observação salva ✓");
     }, 800);
   }
 
   async function setExtraField(field, value) {
     const newValue = log[field] === value ? null : value;
     const res = await fetch(`/api/day-logs/${date}/extra?user=${user}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ field, value: newValue, user }),
     });
-    const updated = await res.json();
-    setLog(updated);
-    setSavedExtra(field);
-    setTimeout(() => setSavedExtra((c) => (c === field ? null : c)), 1500);
+    setLog(await res.json());
+    showToast("Salvo ✓");
+  }
+
+  function handleExtraObsChange(field, value) {
+    setExtraObsDrafts((p) => ({ ...p, [field]: value }));
+    clearTimeout(extraObsTimers.current[field]);
+    extraObsTimers.current[field] = setTimeout(async () => {
+      const res = await fetch(`/api/day-logs/${date}/extra?user=${user}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field, observacao: value, user }),
+      });
+      setLog(await res.json());
+      showToast("Observação salva ✓");
+    }, 800);
   }
 
   function downloadReport() {
@@ -130,178 +167,369 @@ export default function App() {
   }
 
   const activeUser = USERS.find((u) => u.id === user);
+  const isToday = date === today;
 
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div style={{ fontFamily: "system-ui, sans-serif" }}>
-      {/* Abas de usuário */}
-      <div style={{ display: "flex", borderBottom: "2px solid #ddd", background: "white", position: "sticky", top: 0, zIndex: 50 }}>
-        {USERS.map((u) => (
-          <button
-            key={u.id}
-            onClick={() => setUser(u.id)}
-            style={{
-              padding: "14px 32px",
-              border: "none",
-              borderBottom: user === u.id ? "3px solid #1565c0" : "3px solid transparent",
-              background: "none",
-              fontWeight: user === u.id ? "700" : "400",
-              color: user === u.id ? "#1565c0" : "#555",
-              fontSize: 16,
-              cursor: "pointer",
-            }}
-          >
-            {u.label}
-          </button>
-        ))}
-      </div>
+    <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: "#f0f4f8" }}>
+      <Toast message={toast.msg} visible={toast.visible} />
 
-      <div style={{ maxWidth: 640, margin: "0 auto", padding: 24 }}>
-        <h1 style={{ marginTop: 16 }}>Controle de Dieta — {activeUser.label}</h1>
+      {/* ── TOP HEADER ── */}
+      <header style={{
+        background: "white", borderBottom: "1px solid #e5e7eb",
+        padding: "0 16px", flexShrink: 0,
+        display: "flex", flexDirection: "column", gap: 0,
+      }}>
+        {/* User row */}
+        <div style={{ display: "flex", gap: 8, paddingTop: 12, paddingBottom: 8 }}>
+          {USERS.map((u) => {
+            const active = u.id === user;
+            return (
+              <button key={u.id} onClick={() => setUser(u.id)} style={{
+                flex: 1, padding: "8px 0", borderRadius: 10, border: "none",
+                background: active ? "#2563eb" : "#f1f5f9",
+                color: active ? "white" : "#6b7280",
+                fontWeight: active ? 700 : 500, fontSize: 15,
+                transition: "all 0.15s",
+              }}>
+                {u.label}
+              </button>
+            );
+          })}
+        </div>
 
-        <label>
-          Data:{" "}
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />{" "}
-          <span style={{ color: "#666" }}>({weekdayLabel(date)})</span>
-        </label>
+        {/* Date navigation row (only for "hoje" tab) */}
+        {activeTab === "hoje" && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, paddingBottom: 12 }}>
+            <button onClick={() => setDate(addDays(date, -1))} style={navBtn}>‹</button>
+            <div style={{ flex: 1, textAlign: "center" }}>
+              <div style={{ fontWeight: 700, fontSize: 16, color: "#111827" }}>
+                {isToday ? "Hoje" : formatDate(date)}
+              </div>
+              <div style={{ fontSize: 13, color: "#6b7280", textTransform: "capitalize" }}>
+                {isToday ? `${weekdayLabel(date)}, ${formatDate(date)}` : weekdayLabel(date)}
+              </div>
+            </div>
+            <button onClick={() => setDate(addDays(date, 1))} style={navBtn}>›</button>
+            {!isToday && (
+              <button onClick={() => setDate(today)} style={{
+                padding: "6px 12px", borderRadius: 8, border: "1px solid #2563eb",
+                background: "#eff6ff", color: "#2563eb", fontWeight: 600, fontSize: 13,
+              }}>
+                Hoje
+              </button>
+            )}
+          </div>
+        )}
+      </header>
 
-        {!log ? (
-          <p style={{ marginTop: 24 }}>Carregando...</p>
-        ) : (
+      {/* ── SCROLLABLE CONTENT ── */}
+      <main style={{ flex: 1, overflowY: "auto", WebkitOverflowScrolling: "touch" }}>
+
+        {/* ══ TODAY VIEW ══ */}
+        {activeTab === "hoje" && (
           <>
-            <div style={{ marginTop: 24, display: "grid", gap: 16 }}>
-              {MEALS.map(({ key, label }) => (
-                <div key={key} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-                  <strong>{label}</strong>
-                  {savedMeal === key && <span style={{ marginLeft: 8, color: "#2e7d32", fontSize: 13 }}>Salvo!</span>}
-                  <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                    {statusOptions.map((status) => {
-                      const selected = log[key] === status;
+            {/* Section tabs */}
+            <div style={{
+              display: "flex", gap: 0, padding: "12px 16px 0",
+              position: "sticky", top: 0, background: "#f0f4f8", zIndex: 10,
+            }}>
+              {SECTIONS.map((s) => {
+                const active = s === activeSection;
+                return (
+                  <button key={s} onClick={() => setActiveSection(s)} style={{
+                    flex: 1, padding: "9px 4px", border: "none",
+                    borderBottom: active ? "2px solid #2563eb" : "2px solid transparent",
+                    background: "none", color: active ? "#2563eb" : "#6b7280",
+                    fontWeight: active ? 700 : 500, fontSize: 14,
+                  }}>
+                    {s}
+                  </button>
+                );
+              })}
+            </div>
+
+            {!log ? (
+              <div style={{ padding: 32, textAlign: "center", color: "#9ca3af" }}>
+                <div style={{ fontSize: 32, marginBottom: 8 }}>⏳</div>
+                Carregando...
+              </div>
+            ) : (
+              <div style={{ padding: "12px 16px 24px" }}>
+
+                {/* ── DIETA ── */}
+                {activeSection === "Dieta" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {MEALS.map(({ key, label, emoji }) => {
+                      const selected = log[key];
+                      const meta = selected ? STATUS_META[selected] : null;
                       return (
-                        <button
-                          key={status}
-                          onClick={() => setMealStatus(key, status)}
-                          style={{
-                            padding: "6px 12px", borderRadius: 6,
-                            border: `2px solid ${STATUS_COLORS[status]}`,
-                            background: selected ? STATUS_COLORS[status] : "white",
-                            color: selected ? "white" : STATUS_COLORS[status],
-                            cursor: "pointer",
-                          }}
-                        >
-                          {status}
-                        </button>
+                        <div key={key} style={{
+                          background: "white", borderRadius: 16, padding: 16,
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                          borderLeft: meta ? `4px solid ${meta.color}` : "4px solid #e5e7eb",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                            <span style={{ fontSize: 20 }}>{emoji}</span>
+                            <span style={{ fontWeight: 700, fontSize: 15 }}>{label}</span>
+                            {selected && (
+                              <span style={{
+                                marginLeft: "auto", fontSize: 12, fontWeight: 600,
+                                color: meta.color, background: meta.bg,
+                                padding: "3px 10px", borderRadius: 100,
+                              }}>
+                                {selected}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                            {statusOptions.map((status) => {
+                              const active = log[key] === status;
+                              const m = STATUS_META[status];
+                              return (
+                                <button key={status} onClick={() => setMealStatus(key, status)} style={{
+                                  padding: "10px 8px", borderRadius: 10,
+                                  border: `2px solid ${active ? m.color : "#e5e7eb"}`,
+                                  background: active ? m.color : "white",
+                                  color: active ? "white" : "#374151",
+                                  fontWeight: active ? 700 : 500, fontSize: 14,
+                                  transition: "all 0.15s",
+                                }}>
+                                  {status}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <textarea
+                            placeholder="Observação..."
+                            value={obsDrafts[key] || ""}
+                            onChange={(e) => handleObsChange(key, e.target.value)}
+                            rows={2}
+                            style={{
+                              width: "100%", marginTop: 10, padding: "10px 12px",
+                              borderRadius: 10, border: "1px solid #e5e7eb",
+                              background: "#f9fafb", fontSize: 14, color: "#374151",
+                              outline: "none",
+                            }}
+                          />
+                        </div>
                       );
                     })}
                   </div>
-                  <textarea
-                    placeholder="Observação..."
-                    value={obsDrafts[key] || ""}
-                    onChange={(e) => handleObsChange(key, e.target.value)}
-                    rows={2}
-                    style={{ width: "100%", marginTop: 10, padding: 8, borderRadius: 6, border: "1px solid #ccc", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }}
-                  />
-                  {savedObs === key && <span style={{ color: "#2e7d32", fontSize: 12 }}>Observação salva!</span>}
-                </div>
-              ))}
-            </div>
+                )}
 
-            {[
-              { field: "treino", label: "Treino", hasObs: true, colors: { Completo: "#2e7d32", Incompleto: "#e65100", "Não treinei": "#757575" } },
-              { field: "cardio", label: "Cardio", hasObs: true, colors: { Completo: "#2e7d32", Incompleto: "#e65100", "Não fiz": "#757575" } },
-              { field: "agua",   label: "Meta de água", hasObs: false, colors: { "Bati a meta": "#1565c0", "Não bati": "#c62828" } },
-            ].map(({ field, label, hasObs, colors }) => (
-              <div key={field} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12, marginTop: 16 }}>
-                <strong>{label}</strong>
-                {savedExtra === field && <span style={{ marginLeft: 8, color: "#2e7d32", fontSize: 13 }}>Salvo!</span>}
-                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                  {(extraOptions[field] || []).map((opt) => {
-                    const selected = log[field] === opt;
-                    const color = colors[opt] || "#555";
-                    return (
-                      <button
-                        key={opt}
-                        onClick={() => setExtraField(field, opt)}
-                        style={{
-                          padding: "6px 12px", borderRadius: 6,
-                          border: `2px solid ${color}`,
-                          background: selected ? color : "white",
-                          color: selected ? "white" : color,
-                          cursor: "pointer",
-                        }}
-                      >
-                        {opt}
-                      </button>
-                    );
-                  })}
-                </div>
-                {hasObs && (
-                  <>
-                    <textarea
-                      placeholder={`Observação sobre o ${label.toLowerCase()}...`}
-                      value={extraObsDrafts[field] || ""}
-                      onChange={(e) => handleExtraObsChange(field, e.target.value)}
-                      rows={2}
-                      style={{ width: "100%", marginTop: 10, padding: 8, borderRadius: 6, border: "1px solid #ccc", resize: "vertical", fontFamily: "inherit", boxSizing: "border-box" }}
-                    />
-                    {savedExtra === field + "_obs" && <span style={{ color: "#2e7d32", fontSize: 12 }}>Observação salva!</span>}
-                  </>
+                {/* ── EXERCÍCIOS ── */}
+                {activeSection === "Exercícios" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    {[
+                      { field: "treino", label: "Treino", emoji: "💪", hasObs: true },
+                      { field: "cardio", label: "Cardio", emoji: "🏃", hasObs: true },
+                      { field: "agua",   label: "Meta de água", emoji: "💧", hasObs: false },
+                    ].map(({ field, label, emoji, hasObs }) => {
+                      const selected = log[field];
+                      const meta = selected ? EXTRA_META[selected] : null;
+                      return (
+                        <div key={field} style={{
+                          background: "white", borderRadius: 16, padding: 16,
+                          boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                          borderLeft: meta ? `4px solid ${meta.color}` : "4px solid #e5e7eb",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                            <span style={{ fontSize: 20 }}>{emoji}</span>
+                            <span style={{ fontWeight: 700, fontSize: 15 }}>{label}</span>
+                            {selected && (
+                              <span style={{
+                                marginLeft: "auto", fontSize: 12, fontWeight: 600,
+                                color: meta.color, background: meta.color + "18",
+                                padding: "3px 10px", borderRadius: 100,
+                              }}>
+                                {selected}
+                              </span>
+                            )}
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            {(extraOptions[field] || []).map((opt) => {
+                              const active = log[field] === opt;
+                              const m = EXTRA_META[opt] || { color: "#6b7280" };
+                              return (
+                                <button key={opt} onClick={() => setExtraField(field, opt)} style={{
+                                  padding: "12px 16px", borderRadius: 10, textAlign: "left",
+                                  border: `2px solid ${active ? m.color : "#e5e7eb"}`,
+                                  background: active ? m.color : "white",
+                                  color: active ? "white" : "#374151",
+                                  fontWeight: active ? 700 : 500, fontSize: 15,
+                                  transition: "all 0.15s",
+                                }}>
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {hasObs && (
+                            <textarea
+                              placeholder={`Observação sobre o ${label.toLowerCase()}...`}
+                              value={extraObsDrafts[field] || ""}
+                              onChange={(e) => handleExtraObsChange(field, e.target.value)}
+                              rows={2}
+                              style={{
+                                width: "100%", marginTop: 10, padding: "10px 12px",
+                                borderRadius: 10, border: "1px solid #e5e7eb",
+                                background: "#f9fafb", fontSize: 14, color: "#374151",
+                                outline: "none",
+                              }}
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* ── MEDICAÇÕES ── */}
+                {activeSection === "Medicações" && (
+                  <Medications date={date} user={user} showToast={showToast} />
                 )}
               </div>
-            ))}
-
-            <Medications date={date} user={user} />
-
-            <div style={{ marginTop: 40, border: "1px solid #ddd", borderRadius: 8, padding: 16 }}>
-              <h2 style={{ marginTop: 0 }}>Exportar relatório em PDF</h2>
-              <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
-                <label>
-                  De:{" "}
-                  <input type="date" value={reportStart} onChange={(e) => setReportStart(e.target.value)} />{" "}
-                  <span style={{ color: "#666" }}>({weekdayLabel(reportStart)})</span>
-                </label>
-                <label>
-                  Até:{" "}
-                  <input type="date" value={reportEnd} onChange={(e) => setReportEnd(e.target.value)} />{" "}
-                  <span style={{ color: "#666" }}>({weekdayLabel(reportEnd)})</span>
-                </label>
-                <button
-                  onClick={downloadReport}
-                  style={{ padding: "8px 16px", borderRadius: 6, border: "2px solid #1565c0", background: "#1565c0", color: "white", cursor: "pointer" }}
-                >
-                  Exportar PDF
-                </button>
-              </div>
-            </div>
-
-            <h2 style={{ marginTop: 40 }}>Histórico</h2>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={th}>Data</th>
-                  {MEALS.map((m) => <th style={th} key={m.key}>{m.label}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {history.map((h) => (
-                  <tr key={h.date}>
-                    <td style={td}>
-                      {h.date} <span style={{ color: "#999" }}>({weekdayLabel(h.date)})</span>
-                    </td>
-                    {MEALS.map((m) => (
-                      <td style={{ ...td, color: STATUS_COLORS[h[m.key]] || "#999" }} key={m.key}>
-                        {h[m.key] || "-"}
-                      </td>
-                    ))}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            )}
           </>
         )}
-      </div>
+
+        {/* ══ HISTORY VIEW ══ */}
+        {activeTab === "historico" && (
+          <div style={{ padding: "16px" }}>
+            <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 700, color: "#111827" }}>
+              Histórico — {activeUser.label}
+            </h2>
+            {history.length === 0 ? (
+              <div style={{ textAlign: "center", color: "#9ca3af", paddingTop: 40 }}>
+                Nenhum registro ainda.
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {history.map((h) => (
+                  <div
+                    key={h.date}
+                    onClick={() => { setDate(h.date); setActiveTab("hoje"); }}
+                    style={{
+                      background: "white", borderRadius: 14, padding: "14px 16px",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.06)", cursor: "pointer",
+                      display: "flex", flexDirection: "column", gap: 8,
+                    }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>{formatDate(h.date)}</span>
+                      <span style={{ fontSize: 13, color: "#9ca3af", textTransform: "capitalize" }}>
+                        {weekdayLabel(h.date)}
+                      </span>
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {MEALS.map((m) => (
+                        <span key={m.key} style={{
+                          fontSize: 12, padding: "3px 9px", borderRadius: 100, fontWeight: 600,
+                          color: h[m.key] ? HISTORY_COLORS[h[m.key]] : "#d1d5db",
+                          background: h[m.key] ? HISTORY_COLORS[h[m.key]] + "18" : "#f3f4f6",
+                        }}>
+                          {m.emoji} {h[m.key] || "—"}
+                        </span>
+                      ))}
+                    </div>
+                    {(h.treino || h.cardio || h.agua) && (
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {h.treino && <span style={pillGray}>💪 {h.treino}</span>}
+                        {h.cardio && <span style={pillGray}>🏃 {h.cardio}</span>}
+                        {h.agua   && <span style={pillGray}>💧 {h.agua}</span>}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ REPORT VIEW ══ */}
+        {activeTab === "relatorio" && (
+          <div style={{ padding: 16 }}>
+            <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 700 }}>
+              Relatório em PDF
+            </h2>
+            <div style={{
+              background: "white", borderRadius: 16, padding: 20,
+              boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+              display: "flex", flexDirection: "column", gap: 16,
+            }}>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6 }}>
+                  Data inicial
+                </label>
+                <input type="date" value={reportStart} onChange={(e) => setReportStart(e.target.value)} style={dateInput} />
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 4, textTransform: "capitalize" }}>
+                  {weekdayLabel(reportStart)}
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 13, fontWeight: 600, color: "#6b7280", display: "block", marginBottom: 6 }}>
+                  Data final
+                </label>
+                <input type="date" value={reportEnd} onChange={(e) => setReportEnd(e.target.value)} style={dateInput} />
+                <div style={{ fontSize: 12, color: "#9ca3af", marginTop: 4, textTransform: "capitalize" }}>
+                  {weekdayLabel(reportEnd)}
+                </div>
+              </div>
+              <button onClick={downloadReport} style={{
+                padding: "14px", borderRadius: 12, border: "none",
+                background: "#2563eb", color: "white",
+                fontWeight: 700, fontSize: 16,
+              }}>
+                📄 Exportar PDF — {activeUser.label}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div style={{ height: 24 }} />
+      </main>
+
+      {/* ── BOTTOM NAV ── */}
+      <nav style={{
+        background: "white", borderTop: "1px solid #e5e7eb",
+        display: "flex", flexShrink: 0,
+        paddingBottom: "env(safe-area-inset-bottom, 0px)",
+      }}>
+        {[
+          { id: "hoje",      label: "Hoje",      icon: "🏠" },
+          { id: "historico", label: "Histórico",  icon: "📅" },
+          { id: "relatorio", label: "Relatório",  icon: "📄" },
+        ].map(({ id, label, icon }) => {
+          const active = activeTab === id;
+          return (
+            <button key={id} onClick={() => setActiveTab(id)} style={{
+              flex: 1, padding: "10px 0", border: "none", background: "none",
+              display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+              color: active ? "#2563eb" : "#9ca3af",
+            }}>
+              <span style={{ fontSize: 22 }}>{icon}</span>
+              <span style={{ fontSize: 11, fontWeight: active ? 700 : 500 }}>{label}</span>
+            </button>
+          );
+        })}
+      </nav>
     </div>
   );
 }
 
-const th = { textAlign: "left", borderBottom: "2px solid #ddd", padding: 8 };
-const td = { borderBottom: "1px solid #eee", padding: 8 };
+const navBtn = {
+  width: 36, height: 36, borderRadius: 10, border: "1px solid #e5e7eb",
+  background: "white", color: "#374151", fontSize: 20, lineHeight: 1,
+  display: "flex", alignItems: "center", justifyContent: "center",
+};
+
+const dateInput = {
+  width: "100%", padding: "12px", borderRadius: 10, border: "1px solid #e5e7eb",
+  background: "#f9fafb", fontSize: 16, color: "#111827", outline: "none",
+};
+
+const pillGray = {
+  fontSize: 12, padding: "3px 9px", borderRadius: 100, fontWeight: 500,
+  color: "#6b7280", background: "#f3f4f6",
+};
