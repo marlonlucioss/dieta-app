@@ -8,7 +8,7 @@ import dayLogsRouter from "./routes/dayLogs.js";
 import medicationsRouter from "./routes/medications.js";
 import medicationLogsRouter from "./routes/medicationLogs.js";
 
-dotenv.config();
+dotenv.config({ path: new URL(".env", import.meta.url).pathname });
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
