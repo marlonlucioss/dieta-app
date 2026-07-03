@@ -50,6 +50,82 @@ function formatDate(iso) {
   return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
+// ─── Pie Chart ───────────────────────────────────────────────────────────────
+function PieSlice({ cx, cy, r, startAngle, endAngle, color }) {
+  if (endAngle - startAngle >= 360) {
+    return <circle cx={cx} cy={cy} r={r} fill={color} />;
+  }
+  const toRad = (deg) => (deg - 90) * (Math.PI / 180);
+  const x1 = cx + r * Math.cos(toRad(startAngle));
+  const y1 = cy + r * Math.sin(toRad(startAngle));
+  const x2 = cx + r * Math.cos(toRad(endAngle));
+  const y2 = cy + r * Math.sin(toRad(endAngle));
+  const large = endAngle - startAngle > 180 ? 1 : 0;
+  return (
+    <path
+      d={`M${cx},${cy} L${x1},${y1} A${r},${r},0,${large},1,${x2},${y2} Z`}
+      fill={color}
+    />
+  );
+}
+
+function PieChartSummary({ history }) {
+  const STATUS_ORDER = ["Certa", "Errada", "Livre", "Não feita"];
+  const COLORS = { Certa: "#16a34a", Errada: "#dc2626", Livre: "#2563eb", "Não feita": "#9ca3af" };
+
+  // Conta todos os registros de refeição
+  const counts = { Certa: 0, Errada: 0, Livre: 0, "Não feita": 0 };
+  history.forEach((h) => {
+    MEALS.forEach(({ key }) => {
+      const v = h[key];
+      if (v && counts[v] !== undefined) counts[v]++;
+    });
+  });
+  const total = Object.values(counts).reduce((s, n) => s + n, 0);
+  if (total === 0) return null;
+
+  const SIZE = 110;
+  const cx = SIZE / 2, cy = SIZE / 2, r = SIZE / 2 - 4;
+  let angle = 0;
+  const slices = STATUS_ORDER.map((s) => {
+    const deg = (counts[s] / total) * 360;
+    const slice = { status: s, count: counts[s], start: angle, end: angle + deg, color: COLORS[s] };
+    angle += deg;
+    return slice;
+  }).filter((s) => s.count > 0);
+
+  return (
+    <div style={{
+      background: "white", borderRadius: 16, padding: 16,
+      boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+      display: "flex", alignItems: "center", gap: 20,
+    }}>
+      <svg width={SIZE} height={SIZE} style={{ flexShrink: 0 }}>
+        {slices.map((s) => (
+          <PieSlice key={s.status} cx={cx} cy={cy} r={r}
+            startAngle={s.start} endAngle={s.end} color={s.color} />
+        ))}
+        <circle cx={cx} cy={cy} r={r * 0.52} fill="white" />
+        <text x={cx} y={cy - 6} textAnchor="middle" fontSize="15" fontWeight="700" fill="#111827">{total}</text>
+        <text x={cx} y={cy + 10} textAnchor="middle" fontSize="9" fill="#6b7280">refeições</text>
+      </svg>
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 7 }}>
+        {slices.map((s) => {
+          const pct = Math.round((s.count / total) * 100);
+          return (
+            <div key={s.status} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 10, height: 10, borderRadius: "50%", background: s.color, flexShrink: 0 }} />
+              <span style={{ fontSize: 13, color: "#374151", flex: 1 }}>{s.status}</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: s.color }}>{pct}%</span>
+              <span style={{ fontSize: 12, color: "#9ca3af" }}>({s.count})</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ─── Toast ────────────────────────────────────────────────────────────────────
 function Toast({ message, visible }) {
   return (
@@ -405,44 +481,47 @@ export default function App() {
                 Nenhum registro ainda.
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {history.map((h) => (
-                  <div
-                    key={h.date}
-                    onClick={() => { setDate(h.date); setActiveTab("hoje"); }}
-                    style={{
-                      background: "white", borderRadius: 14, padding: "14px 16px",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.06)", cursor: "pointer",
-                      display: "flex", flexDirection: "column", gap: 8,
-                    }}
-                  >
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                      <span style={{ fontWeight: 700, fontSize: 15 }}>{formatDate(h.date)}</span>
-                      <span style={{ fontSize: 13, color: "#9ca3af", textTransform: "capitalize" }}>
-                        {weekdayLabel(h.date)}
-                      </span>
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {MEALS.map((m) => (
-                        <span key={m.key} style={{
-                          fontSize: 12, padding: "3px 9px", borderRadius: 100, fontWeight: 600,
-                          color: h[m.key] ? HISTORY_COLORS[h[m.key]] : "#d1d5db",
-                          background: h[m.key] ? HISTORY_COLORS[h[m.key]] + "18" : "#f3f4f6",
-                        }}>
-                          {m.emoji} {h[m.key] || "—"}
+              <>
+                <PieChartSummary history={history} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+                  {history.map((h) => (
+                    <div
+                      key={h.date}
+                      onClick={() => { setDate(h.date); setActiveTab("hoje"); }}
+                      style={{
+                        background: "white", borderRadius: 14, padding: "14px 16px",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.06)", cursor: "pointer",
+                        display: "flex", flexDirection: "column", gap: 8,
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                        <span style={{ fontWeight: 700, fontSize: 15 }}>{formatDate(h.date)}</span>
+                        <span style={{ fontSize: 13, color: "#9ca3af", textTransform: "capitalize" }}>
+                          {weekdayLabel(h.date)}
                         </span>
-                      ))}
-                    </div>
-                    {(h.treino || h.cardio || h.agua) && (
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {h.treino && <span style={pillGray}>💪 {h.treino}</span>}
-                        {h.cardio && <span style={pillGray}>🏃 {h.cardio}</span>}
-                        {h.agua   && <span style={pillGray}>💧 {h.agua}</span>}
                       </div>
-                    )}
-                  </div>
-                ))}
-              </div>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        {MEALS.map((m) => (
+                          <span key={m.key} style={{
+                            fontSize: 12, padding: "3px 9px", borderRadius: 100, fontWeight: 600,
+                            color: h[m.key] ? HISTORY_COLORS[h[m.key]] : "#d1d5db",
+                            background: h[m.key] ? HISTORY_COLORS[h[m.key]] + "18" : "#f3f4f6",
+                          }}>
+                            {m.emoji} {h[m.key] || "—"}
+                          </span>
+                        ))}
+                      </div>
+                      {(h.treino || h.cardio || h.agua) && (
+                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                          {h.treino && <span style={pillGray}>💪 {h.treino}</span>}
+                          {h.cardio && <span style={pillGray}>🏃 {h.cardio}</span>}
+                          {h.agua   && <span style={pillGray}>💧 {h.agua}</span>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
             )}
           </div>
         )}

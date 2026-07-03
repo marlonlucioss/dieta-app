@@ -114,17 +114,62 @@ router.get("/report/pdf", async (req, res) => {
       doc.moveDown(0.7);
     });
 
+    // ── Resumo refeições ──
+    const totalRefeicoes = Object.values(counts).reduce((s, n) => s + n, 0);
     doc.moveDown(1);
     doc.fontSize(13).text("Resumo do período - Refeições", { underline: true });
     Object.entries(counts).forEach(([status, count]) => {
-      doc.fontSize(11).text(`  ${status}: ${count}`);
+      const pct = totalRefeicoes > 0 ? Math.round((count / totalRefeicoes) * 100) : 0;
+      doc.fontSize(11).text(`  ${status}: ${count}  (${pct}%)`);
     });
 
+    // ── Resumo treino ──
+    const treinoCounts = { Completo: 0, Incompleto: 0, "Não treinei": 0 };
+    logs.forEach((l) => { if (l.treino && treinoCounts[l.treino] !== undefined) treinoCounts[l.treino]++; });
+    const totalTreino = logs.filter((l) => l.treino).length;
+    if (totalTreino > 0) {
+      doc.moveDown(1);
+      doc.fontSize(13).text("Resumo do período - Treino", { underline: true });
+      Object.entries(treinoCounts).forEach(([status, count]) => {
+        const pct = Math.round((count / totalTreino) * 100);
+        doc.fontSize(11).text(`  ${status}: ${count}  (${pct}%)`);
+      });
+    }
+
+    // ── Resumo cardio ──
+    const cardioCounts = { Completo: 0, Incompleto: 0, "Não fiz": 0 };
+    logs.forEach((l) => { if (l.cardio && cardioCounts[l.cardio] !== undefined) cardioCounts[l.cardio]++; });
+    const totalCardio = logs.filter((l) => l.cardio).length;
+    if (totalCardio > 0) {
+      doc.moveDown(1);
+      doc.fontSize(13).text("Resumo do período - Cardio", { underline: true });
+      Object.entries(cardioCounts).forEach(([status, count]) => {
+        const pct = Math.round((count / totalCardio) * 100);
+        doc.fontSize(11).text(`  ${status}: ${count}  (${pct}%)`);
+      });
+    }
+
+    // ── Resumo água ──
+    const aguaCounts = { "Bati a meta": 0, "Não bati": 0 };
+    logs.forEach((l) => { if (l.agua && aguaCounts[l.agua] !== undefined) aguaCounts[l.agua]++; });
+    const totalAgua = logs.filter((l) => l.agua).length;
+    if (totalAgua > 0) {
+      doc.moveDown(1);
+      doc.fontSize(13).text("Resumo do período - Meta de água", { underline: true });
+      Object.entries(aguaCounts).forEach(([status, count]) => {
+        const pct = Math.round((count / totalAgua) * 100);
+        doc.fontSize(11).text(`  ${status}: ${count}  (${pct}%)`);
+      });
+    }
+
+    // ── Resumo medicações ──
     if (Object.keys(medCounts).length > 0) {
+      const totalMed = Object.values(medCounts).reduce((s, n) => s + n, 0);
       doc.moveDown(1);
       doc.fontSize(13).text("Resumo do período - Medicações", { underline: true });
       Object.entries(medCounts).forEach(([status, count]) => {
-        doc.fontSize(11).text(`  ${status}: ${count}`);
+        const pct = totalMed > 0 ? Math.round((count / totalMed) * 100) : 0;
+        doc.fontSize(11).text(`  ${status}: ${count}  (${pct}%)`);
       });
     }
   }
