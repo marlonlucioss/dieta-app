@@ -164,12 +164,10 @@ router.get("/report/pdf", async (req, res) => {
 
     // ── Resumo medicações ──
     if (Object.keys(medCounts).length > 0) {
-      const totalMed = Object.values(medCounts).reduce((s, n) => s + n, 0);
       doc.moveDown(1);
       doc.fontSize(13).text("Resumo do período - Medicações", { underline: true });
       Object.entries(medCounts).forEach(([status, count]) => {
-        const pct = totalMed > 0 ? Math.round((count / totalMed) * 100) : 0;
-        doc.fontSize(11).text(`  ${status}: ${count}  (${pct}%)`);
+        doc.fontSize(11).text(`  ${status}: ${count}`);
       });
     }
   }
