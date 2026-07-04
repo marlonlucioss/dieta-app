@@ -50,6 +50,107 @@ function formatDate(iso) {
   return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
+// ─── Weight Chart ────────────────────────────────────────────────────────────
+function WeightChart({ weightLogs }) {
+  if (!weightLogs || weightLogs.length === 0) return null;
+
+  // Ordena do mais antigo para o mais recente para o gráfico
+  const sorted = [...weightLogs].sort((a, b) => a.date.localeCompare(b.date));
+  const last = sorted[sorted.length - 1];
+  const prev = sorted.length > 1 ? sorted[sorted.length - 2] : null;
+  const diff = prev ? (last.weight - prev.weight).toFixed(1) : null;
+  const diffColor = diff === null ? "#6b7280" : diff > 0 ? "#dc2626" : diff < 0 ? "#16a34a" : "#6b7280";
+
+  if (sorted.length === 1) {
+    return (
+      <div style={{
+        background: "white", borderRadius: 16, padding: 20,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 14,
+      }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 12 }}>
+          Peso
+        </div>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{ fontSize: 36, fontWeight: 800, color: "#0891b2" }}>{last.weight}</span>
+          <span style={{ fontSize: 16, color: "#6b7280", fontWeight: 600 }}>kg</span>
+        </div>
+        <div style={{ fontSize: 13, color: "#9ca3af", marginTop: 4 }}>
+          Registrado em {formatDate(last.date)} · {weekdayLabel(last.date)}
+        </div>
+      </div>
+    );
+  }
+
+  // Gráfico SVG de linha
+  const W = 320, H = 120, PAD = { top: 12, right: 16, bottom: 28, left: 40 };
+  const chartW = W - PAD.left - PAD.right;
+  const chartH = H - PAD.top - PAD.bottom;
+  const weights = sorted.map((w) => w.weight);
+  const minW = Math.min(...weights);
+  const maxW = Math.max(...weights);
+  const range = maxW - minW || 1;
+
+  const toX = (i) => PAD.left + (i / (sorted.length - 1)) * chartW;
+  const toY = (w) => PAD.top + chartH - ((w - minW) / range) * chartH;
+
+  const points = sorted.map((w, i) => `${toX(i)},${toY(w.weight)}`).join(" ");
+  const areaPoints = `${toX(0)},${PAD.top + chartH} ${points} ${toX(sorted.length - 1)},${PAD.top + chartH}`;
+
+  // Labels do eixo Y (min, max)
+  const yLabels = [minW, maxW];
+
+  return (
+    <div style={{
+      background: "white", borderRadius: 16, padding: "16px 16px 12px",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 14,
+    }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+        Peso
+      </div>
+
+      {/* Destaque último peso */}
+      <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 4 }}>
+        <span style={{ fontSize: 36, fontWeight: 800, color: "#0891b2" }}>{last.weight}</span>
+        <span style={{ fontSize: 16, color: "#6b7280", fontWeight: 600 }}>kg</span>
+        {diff !== null && (
+          <span style={{ fontSize: 14, fontWeight: 700, color: diffColor, marginLeft: 4 }}>
+            {diff > 0 ? "▲" : diff < 0 ? "▼" : "—"} {Math.abs(diff)} kg
+          </span>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: "#9ca3af", marginBottom: 12 }}>
+        Último registro: {formatDate(last.date)} · {weekdayLabel(last.date)}
+        {prev && ` · anterior: ${prev.weight} kg em ${formatDate(prev.date)}`}
+      </div>
+
+      {/* Gráfico de linha */}
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: "visible" }}>
+        {/* Área preenchida */}
+        <polygon points={areaPoints} fill="#0891b2" fillOpacity="0.08" />
+        {/* Linha */}
+        <polyline points={points} fill="none" stroke="#0891b2" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {/* Pontos */}
+        {sorted.map((w, i) => (
+          <g key={w.date}>
+            <circle cx={toX(i)} cy={toY(w.weight)} r="4" fill="#0891b2" stroke="white" strokeWidth="2" />
+          </g>
+        ))}
+        {/* Labels eixo Y */}
+        {yLabels.map((v) => (
+          <text key={v} x={PAD.left - 6} y={toY(v) + 4} textAnchor="end" fontSize="10" fill="#9ca3af">{v}</text>
+        ))}
+        {/* Labels eixo X — só primeira e última data */}
+        <text x={toX(0)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">
+          {formatDate(sorted[0].date)}
+        </text>
+        <text x={toX(sorted.length - 1)} y={H - 4} textAnchor="middle" fontSize="9" fill="#9ca3af">
+          {formatDate(sorted[sorted.length - 1].date)}
+        </text>
+      </svg>
+    </div>
+  );
+}
+
 // ─── Pie Chart ───────────────────────────────────────────────────────────────
 function PieSlice({ cx, cy, r, startAngle, endAngle, color }) {
   if (endAngle - startAngle >= 360) {
@@ -568,6 +669,8 @@ export default function App() {
               <h2 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 700, color: "#111827" }}>
                 Histórico — {activeUser.label}
               </h2>
+
+              <WeightChart weightLogs={weightLogs} />
 
               {/* Filtro de datas */}
               <div style={{
