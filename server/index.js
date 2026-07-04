@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import dayLogsRouter from "./routes/dayLogs.js";
 import medicationsRouter from "./routes/medications.js";
 import medicationLogsRouter from "./routes/medicationLogs.js";
+import weightLogsRouter from "./routes/weightLogs.js";
 
 dotenv.config();
 
@@ -19,6 +20,7 @@ app.use(express.json());
 app.use("/api/day-logs", dayLogsRouter);
 app.use("/api/medications", medicationsRouter);
 app.use("/api/medication-logs", medicationLogsRouter);
+app.use("/api/weight-logs", weightLogsRouter);
 
 // Serve frontend em produção
 const clientDist = path.join(__dirname, "../client/dist");

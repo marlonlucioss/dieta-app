@@ -2,6 +2,7 @@ import { Router } from "express";
 import PDFDocument from "pdfkit";
 import DayLog, { STATUS, TREINO, CARDIO, AGUA } from "../models/DayLog.js";
 import MedicationLog from "../models/MedicationLog.js";
+import WeightLog from "../models/WeightLog.js";
 
 const router = Router();
 
@@ -45,6 +46,11 @@ router.get("/report/pdf", async (req, res) => {
   }
 
   const logs = await DayLog.find({ user, date: { $gte: start, $lte: end } }).sort({ date: 1 });
+
+  // Peso: busca o registro mais próximo antes/na data inicial e mais próximo antes/na data final
+  const weightAtStart = await WeightLog.findOne({ user, date: { $lte: start } }).sort({ date: -1 });
+  const weightAtEnd   = await WeightLog.findOne({ user, date: { $lte: end   } }).sort({ date: -1 });
+
   const medLogs = await MedicationLog.find({ user, date: { $gte: start, $lte: end } }).sort({
     date: 1,
     time: 1,
@@ -65,6 +71,17 @@ router.get("/report/pdf", async (req, res) => {
 
   doc.fontSize(18).text(`Relatório de Dieta — ${userName}`, { align: "center" });
   doc.fontSize(11).text(`Período: ${start} a ${end}`, { align: "center" });
+  if (weightAtStart || weightAtEnd) {
+    const startStr = weightAtStart ? `${weightAtStart.weight} kg (${weightAtStart.date})` : "—";
+    const endStr   = weightAtEnd   ? `${weightAtEnd.weight} kg (${weightAtEnd.date})`     : "—";
+    doc.moveDown(0.5);
+    doc.fontSize(11).text(`Peso inicial: ${startStr}   →   Peso final: ${endStr}`, { align: "center" });
+    if (weightAtStart && weightAtEnd) {
+      const diff = (weightAtEnd.weight - weightAtStart.weight).toFixed(1);
+      const sinal = diff > 0 ? "+" : "";
+      doc.fontSize(11).text(`Variação: ${sinal}${diff} kg`, { align: "center" });
+    }
+  }
   doc.moveDown(1.5);
 
   const allDates = Array.from(new Set([...logs.map((l) => l.date), ...Object.keys(medLogsByDate)])).sort();

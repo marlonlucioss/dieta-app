@@ -165,6 +165,15 @@ export default function App() {
   const [reportStart, setReportStart] = useState(todayISO());
   const [reportEnd, setReportEnd]     = useState(todayISO());
 
+  // Peso
+  const [weightLogs, setWeightLogs]   = useState([]); // [{date, weight}]
+  const [weightDraft, setWeightDraft] = useState(""); // input atual
+  const weightTimer = useRef(null);
+
+  // Filtro do histórico
+  const [histStart, setHistStart] = useState("");
+  const [histEnd, setHistEnd]     = useState(todayISO());
+
   const today = todayISO();
 
   function showToast(msg) {
@@ -187,10 +196,19 @@ export default function App() {
         setObsDrafts({ cafe: data.cafeObs||"", almoco: data.almocoObs||"", lanche: data.lancheObs||"", jantar: data.jantarObs||"" });
         setExtraObsDrafts({ treino: data.treinoObs||"", cardio: data.cardioObs||"" });
       });
+    // Peso do dia atual
+    fetch(`/api/weight-logs/${date}?user=${user}`)
+      .then((r) => r.json())
+      .then((w) => setWeightDraft(w ? String(w.weight) : ""));
   }, [date, user]);
 
   useEffect(() => {
     fetch(`/api/day-logs?user=${user}`).then((r) => r.json()).then(setHistory);
+    fetch(`/api/weight-logs?user=${user}`).then((r) => r.json()).then((ws) => {
+      setWeightLogs(ws);
+      // Seta data inicial do histórico = último pesagem
+      if (ws.length > 0 && !histStart) setHistStart(ws[0].date);
+    });
   }, [log, user]);
 
   async function setMealStatus(meal, status) {
@@ -236,6 +254,30 @@ export default function App() {
       });
       setLog(await res.json());
       showToast("Observação salva ✓");
+    }, 800);
+  }
+
+  function handleWeightChange(value) {
+    setWeightDraft(value);
+    clearTimeout(weightTimer.current);
+    weightTimer.current = setTimeout(async () => {
+      const num = parseFloat(value.replace(",", "."));
+      if (value === "") {
+        await fetch(`/api/weight-logs/${date}?user=${user}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ weight: null, user }),
+        });
+      } else if (!isNaN(num) && num > 0) {
+        await fetch(`/api/weight-logs/${date}?user=${user}`, {
+          method: "PUT", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ weight: num, user }),
+        });
+        setWeightLogs((prev) => {
+          const others = prev.filter((w) => w.date !== date);
+          return [{ date, weight: num }, ...others].sort((a, b) => b.date.localeCompare(a.date));
+        });
+        showToast("Peso salvo ✓");
+      }
     }, 800);
   }
 
@@ -462,6 +504,52 @@ export default function App() {
                   </div>
                 )}
 
+                {/* ── PESO (dentro de Exercícios) ── */}
+                {activeSection === "Exercícios" && (
+                  <div style={{
+                    background: "white", borderRadius: 16, padding: 16,
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                    borderLeft: weightDraft ? "4px solid #0891b2" : "4px solid #e5e7eb",
+                    marginTop: 0,
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                      <span style={{ fontSize: 20 }}>⚖️</span>
+                      <span style={{ fontWeight: 700, fontSize: 15 }}>Peso</span>
+                      {weightDraft && (
+                        <span style={{
+                          marginLeft: "auto", fontSize: 12, fontWeight: 600,
+                          color: "#0891b2", background: "#ecfeff",
+                          padding: "3px 10px", borderRadius: 100,
+                        }}>
+                          {weightDraft} kg
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        placeholder="Ex: 82.5"
+                        value={weightDraft}
+                        onChange={(e) => handleWeightChange(e.target.value)}
+                        style={{
+                          flex: 1, padding: "12px", borderRadius: 10,
+                          border: "1px solid #e5e7eb", background: "#f9fafb",
+                          fontSize: 18, fontWeight: 600, color: "#111827", outline: "none",
+                          textAlign: "center",
+                        }}
+                      />
+                      <span style={{ fontSize: 16, color: "#6b7280", fontWeight: 600 }}>kg</span>
+                    </div>
+                    {weightLogs.length > 0 && (
+                      <div style={{ marginTop: 10, fontSize: 13, color: "#9ca3af" }}>
+                        Último registro: {weightLogs[0].weight} kg em {formatDate(weightLogs[0].date)}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {/* ── MEDICAÇÕES ── */}
                 {activeSection === "Medicações" && (
                   <Medications date={date} user={user} showToast={showToast} />
@@ -472,60 +560,112 @@ export default function App() {
         )}
 
         {/* ══ HISTORY VIEW ══ */}
-        {activeTab === "historico" && (
-          <div style={{ padding: "16px" }}>
-            <h2 style={{ margin: "0 0 16px", fontSize: 18, fontWeight: 700, color: "#111827" }}>
-              Histórico — {activeUser.label}
-            </h2>
-            {history.length === 0 ? (
-              <div style={{ textAlign: "center", color: "#9ca3af", paddingTop: 40 }}>
-                Nenhum registro ainda.
-              </div>
-            ) : (
-              <>
-                <PieChartSummary history={history} />
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
-                  {history.map((h) => (
-                    <div
-                      key={h.date}
-                      onClick={() => { setDate(h.date); setActiveTab("hoje"); }}
-                      style={{
-                        background: "white", borderRadius: 14, padding: "14px 16px",
-                        boxShadow: "0 1px 3px rgba(0,0,0,0.06)", cursor: "pointer",
-                        display: "flex", flexDirection: "column", gap: 8,
-                      }}
-                    >
-                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                        <span style={{ fontWeight: 700, fontSize: 15 }}>{formatDate(h.date)}</span>
-                        <span style={{ fontSize: 13, color: "#9ca3af", textTransform: "capitalize" }}>
-                          {weekdayLabel(h.date)}
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                        {MEALS.map((m) => (
-                          <span key={m.key} style={{
-                            fontSize: 12, padding: "3px 9px", borderRadius: 100, fontWeight: 600,
-                            color: h[m.key] ? HISTORY_COLORS[h[m.key]] : "#d1d5db",
-                            background: h[m.key] ? HISTORY_COLORS[h[m.key]] + "18" : "#f3f4f6",
-                          }}>
-                            {m.emoji} {h[m.key] || "—"}
-                          </span>
-                        ))}
-                      </div>
-                      {(h.treino || h.cardio || h.agua) && (
-                        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                          {h.treino && <span style={pillGray}>💪 {h.treino}</span>}
-                          {h.cardio && <span style={pillGray}>🏃 {h.cardio}</span>}
-                          {h.agua   && <span style={pillGray}>💧 {h.agua}</span>}
-                        </div>
-                      )}
-                    </div>
-                  ))}
+        {activeTab === "historico" && (() => {
+          const weightByDate = Object.fromEntries(weightLogs.map((w) => [w.date, w.weight]));
+          const filtered = history.filter((h) => {
+            if (histStart && h.date < histStart) return false;
+            if (histEnd   && h.date > histEnd)   return false;
+            return true;
+          });
+          return (
+            <div style={{ padding: "16px" }}>
+              <h2 style={{ margin: "0 0 12px", fontSize: 18, fontWeight: 700, color: "#111827" }}>
+                Histórico — {activeUser.label}
+              </h2>
+
+              {/* Filtro de datas */}
+              <div style={{
+                background: "white", borderRadius: 14, padding: "12px 14px",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.06)", marginBottom: 14,
+                display: "flex", flexDirection: "column", gap: 10,
+              }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Filtrar período
                 </div>
-              </>
-            )}
-          </div>
-        )}
+                <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>De</div>
+                    <input type="date" value={histStart} onChange={(e) => setHistStart(e.target.value)} style={dateInput} />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 11, color: "#9ca3af", marginBottom: 4 }}>Até</div>
+                    <input type="date" value={histEnd} onChange={(e) => setHistEnd(e.target.value)} style={dateInput} />
+                  </div>
+                  {(histStart || histEnd !== todayISO()) && (
+                    <button onClick={() => { setHistStart(weightLogs[0]?.date || ""); setHistEnd(todayISO()); }} style={{
+                      marginTop: 18, padding: "8px 10px", borderRadius: 8,
+                      border: "1px solid #e5e7eb", background: "#f9fafb",
+                      color: "#6b7280", fontSize: 12, whiteSpace: "nowrap",
+                    }}>
+                      Limpar
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {filtered.length === 0 ? (
+                <div style={{ textAlign: "center", color: "#9ca3af", paddingTop: 40 }}>
+                  Nenhum registro neste período.
+                </div>
+              ) : (
+                <>
+                  <PieChartSummary history={filtered} />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 14 }}>
+                    {filtered.map((h) => {
+                      const peso = weightByDate[h.date];
+                      return (
+                        <div
+                          key={h.date}
+                          onClick={() => { setDate(h.date); setActiveTab("hoje"); }}
+                          style={{
+                            background: "white", borderRadius: 14, padding: "14px 16px",
+                            boxShadow: "0 1px 3px rgba(0,0,0,0.06)", cursor: "pointer",
+                            display: "flex", flexDirection: "column", gap: 8,
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                            <span style={{ fontWeight: 700, fontSize: 15 }}>{formatDate(h.date)}</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                              {peso && (
+                                <span style={{
+                                  fontSize: 12, fontWeight: 700, color: "#0891b2",
+                                  background: "#ecfeff", padding: "2px 8px", borderRadius: 100,
+                                }}>
+                                  ⚖️ {peso} kg
+                                </span>
+                              )}
+                              <span style={{ fontSize: 13, color: "#9ca3af", textTransform: "capitalize" }}>
+                                {weekdayLabel(h.date)}
+                              </span>
+                            </div>
+                          </div>
+                          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                            {MEALS.map((m) => (
+                              <span key={m.key} style={{
+                                fontSize: 12, padding: "3px 9px", borderRadius: 100, fontWeight: 600,
+                                color: h[m.key] ? HISTORY_COLORS[h[m.key]] : "#d1d5db",
+                                background: h[m.key] ? HISTORY_COLORS[h[m.key]] + "18" : "#f3f4f6",
+                              }}>
+                                {m.emoji} {h[m.key] || "—"}
+                              </span>
+                            ))}
+                          </div>
+                          {(h.treino || h.cardio || h.agua) && (
+                            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                              {h.treino && <span style={pillGray}>💪 {h.treino}</span>}
+                              {h.cardio && <span style={pillGray}>🏃 {h.cardio}</span>}
+                              {h.agua   && <span style={pillGray}>💧 {h.agua}</span>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ══ REPORT VIEW ══ */}
         {activeTab === "relatorio" && (
