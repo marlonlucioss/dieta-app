@@ -723,7 +723,12 @@ export default function App() {
             <button key={id} onClick={() => {
               if (id === "historico") {
                 setHistEnd(date);
-                setHistStart(weightLogs.length > 0 ? weightLogs[0].date : "");
+                fetch(`/api/weight-logs?user=${user}`)
+                  .then((r) => r.json())
+                  .then((ws) => {
+                    setWeightLogs(ws);
+                    setHistStart(ws.length > 0 ? ws[0].date : "");
+                  });
               }
               setActiveTab(id);
             }} style={{
