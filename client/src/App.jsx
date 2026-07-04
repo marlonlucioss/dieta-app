@@ -10,11 +10,10 @@ const MEALS = [
 ];
 
 const STATUS_META = {
-  Certa:        { color: "#16a34a", bg: "#f0fdf4" },
-  Errada:       { color: "#dc2626", bg: "#fef2f2" },
-  "Não feita":  { color: "#6b7280", bg: "#f9fafb" },
-  Livre:        { color: "#2563eb", bg: "#eff6ff" },
-  Substituição: { color: "#9333ea", bg: "#faf5ff" },
+  Certa:       { color: "#16a34a", bg: "#f0fdf4" },
+  Errada:      { color: "#dc2626", bg: "#fef2f2" },
+  "Não feita": { color: "#6b7280", bg: "#f9fafb" },
+  Livre:       { color: "#2563eb", bg: "#eff6ff" },
 };
 
 const EXTRA_META = {
@@ -32,7 +31,7 @@ const USERS = [
 ];
 
 const HISTORY_COLORS = {
-  Certa: "#16a34a", Errada: "#dc2626", "Não feita": "#9ca3af", Livre: "#2563eb", Substituição: "#9333ea",
+  Certa: "#16a34a", Errada: "#dc2626", "Não feita": "#9ca3af", Livre: "#2563eb",
 };
 
 function todayISO() {
@@ -71,11 +70,11 @@ function PieSlice({ cx, cy, r, startAngle, endAngle, color }) {
 }
 
 function PieChartSummary({ history }) {
-  const STATUS_ORDER = ["Certa", "Errada", "Livre", "Substituição", "Não feita"];
-  const COLORS = { Certa: "#16a34a", Errada: "#dc2626", Livre: "#2563eb", Substituição: "#9333ea", "Não feita": "#9ca3af" };
+  const STATUS_ORDER = ["Certa", "Errada", "Livre", "Não feita"];
+  const COLORS = { Certa: "#16a34a", Errada: "#dc2626", Livre: "#2563eb", "Não feita": "#9ca3af" };
 
   // Conta todos os registros de refeição
-  const counts = { Certa: 0, Errada: 0, Livre: 0, Substituição: 0, "Não feita": 0 };
+  const counts = { Certa: 0, Errada: 0, Livre: 0, "Não feita": 0 };
   history.forEach((h) => {
     MEALS.forEach(({ key }) => {
       const v = h[key];
