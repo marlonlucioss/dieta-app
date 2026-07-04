@@ -172,7 +172,7 @@ export default function App() {
 
   // Filtro do histórico
   const [histStart, setHistStart] = useState("");
-  const [histEnd, setHistEnd]     = useState(todayISO());
+  const [histEnd, setHistEnd]     = useState(date);
 
   const today = todayISO();
 
@@ -204,12 +204,9 @@ export default function App() {
 
   useEffect(() => {
     fetch(`/api/day-logs?user=${user}`).then((r) => r.json()).then(setHistory);
-    fetch(`/api/weight-logs?user=${user}`).then((r) => r.json()).then((ws) => {
-      setWeightLogs(ws);
-      // Seta data inicial do histórico = último pesagem
-      if (ws.length > 0 && !histStart) setHistStart(ws[0].date);
-    });
+    fetch(`/api/weight-logs?user=${user}`).then((r) => r.json()).then(setWeightLogs);
   }, [log, user]);
+
 
   async function setMealStatus(meal, status) {
     const newStatus = log[meal] === status ? null : status;
@@ -723,7 +720,13 @@ export default function App() {
         ].map(({ id, label, icon }) => {
           const active = activeTab === id;
           return (
-            <button key={id} onClick={() => setActiveTab(id)} style={{
+            <button key={id} onClick={() => {
+              if (id === "historico") {
+                setHistEnd(date);
+                setHistStart(weightLogs.length > 0 ? weightLogs[0].date : "");
+              }
+              setActiveTab(id);
+            }} style={{
               flex: 1, padding: "10px 0", border: "none", background: "none",
               display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
               color: active ? "#2563eb" : "#9ca3af",
