@@ -1,6 +1,6 @@
 import mongoose from "mongoose";
 
-const STATUS_OPTIONS = ["Certa", "Errada", "Não feita", "Livre"];
+const STATUS_OPTIONS = ["Certa", "Errada", "Não feita", "Livre", "Substituição"];
 const TREINO_OPTIONS = ["Completo", "Incompleto", "Não treinei"];
 const CARDIO_OPTIONS = ["Completo", "Incompleto", "Não fiz"];
 const AGUA_OPTIONS = ["Bati a meta", "Não bati"];
